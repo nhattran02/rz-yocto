@@ -1,0 +1,9 @@
+# Ignore entire Yocto build directory
+build/*
+
+# Keep build/conf
+!build/conf/
+!build/conf/**
+
+# Ignore Claude config
+.claude/
