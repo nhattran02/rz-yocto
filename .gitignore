@@ -5,5 +5,9 @@ build/*
 !build/conf/
 !build/conf/**
 
+# Keep build/workspace
+!build/workspace/
+!build/workspace/**
+
 # Ignore Claude config
 .claude/
