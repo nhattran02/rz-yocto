@@ -1,0 +1,110 @@
+diff --git a/plat/renesas/rz/board/g3e_smarc/pwrc_board.c b/plat/renesas/rz/board/g3e_smarc/pwrc_board.c
+index 5b15570..34c2357 100644
+--- a/plat/renesas/rz/board/g3e_smarc/pwrc_board.c
++++ b/plat/renesas/rz/board/g3e_smarc/pwrc_board.c
+@@ -11,6 +11,14 @@
+ #include <common/debug.h>
+ #include <riic.h>
+ 
++#if defined(PLAT_SYSTEM_SUSPEND_awo)
++#include <sys_regs.h>
++
++#define IS_RESUME_FLG		(0x00000001)
++#define IS_RESUME_CLR		(0x00000000)
++#define DST_REG_ADDR1		((volatile uint32_t *)SYS_GPREG_0)
++#endif
++
+ #define GPAK				(0x38)
+ #define GPAK_RET_STAT_REG	(0xF1)
+ #define GPAK_RET_CTRL_REG	(0x49)
+@@ -39,6 +47,15 @@ bool pwrc_board_is_resume(void)
+ 			panic();
+ 		}
+ 
++#if defined(PLAT_SYSTEM_SUSPEND_awo)
++		if (*DST_REG_ADDR1  == IS_RESUME_FLG) {
++			is_resume = true;
++			/* Flag clear */
++			*DST_REG_ADDR1 = IS_RESUME_CLR;
++			INFO("Resuming from reset\n");
++			break;
++		}
++#else
+ 		if (0x3F == retention_status) {
+ 			is_resume = true;
+ 		} else if (0x1F == retention_status && !is_resume) {
+@@ -62,6 +79,7 @@ bool pwrc_board_is_resume(void)
+ 			}
+ 		}
++#endif
+ 	}
+ 
+ 	if (timeout <= 0) {
+ 		WARN("Retention status not found!");
+diff --git a/plat/renesas/rz/common/g3e_common.mk b/plat/renesas/rz/common/g3e_common.mk
+index d1bd287..6b4c08d 100644
+--- a/plat/renesas/rz/common/g3e_common.mk
++++ b/plat/renesas/rz/common/g3e_common.mk
+@@ -24,6 +24,9 @@ PLAT_SYSTEM_SUSPEND				:= 0
+ ifneq (${PLAT_SYSTEM_SUSPEND},0)
+ override PLAT_SYSTEM_SUSPEND	:= 1
+ $(eval $(call add_define,PLAT_EXTRA_LD_SCRIPT))
++ifneq (${PLAT_M33_BOOT_SUPPORT},1)
++$(eval $(call add_define,PLAT_SYSTEM_SUSPEND_awo))
++endif
+ endif
+ 
+ $(eval $(call add_define,PLAT_SOC_RZG3E))
+diff --git a/plat/renesas/rz/soc/g3e/drivers/pwrc/pwrc.c b/plat/renesas/rz/soc/g3e/drivers/pwrc/pwrc.c
+index 86988fb..0cb993c 100644
+--- a/plat/renesas/rz/soc/g3e/drivers/pwrc/pwrc.c
++++ b/plat/renesas/rz/soc/g3e/drivers/pwrc/pwrc.c
+@@ -22,6 +22,27 @@
+ #include "rz_private.h"
+ #include "sys_regs.h"
+ 
++#if defined(PLAT_SYSTEM_SUSPEND_awo)
++#include "rz_soc_def.h"
++#include <drivers/arm/gic_common.h>
++
++/** GICD_CTLR.EnableGrp* write mask */
++#define GICD_CTLR_EGRP_MASK 0xfffffff8
++/** GICD_CTLR.RWP read mask */
++#define GICD_CTLR_RWP_MASK 0x80000000
++/** ICU_SWINT offset */
++#define ICU_SWINT 0x0130
++/** Software interrupt number to use */
++#define INT_NUM_TO_USE 0
++/** bit shift for CM33 SE_INT */
++#define SHIFT_FOR_IM33 16
++
++static void rz_awo_notify(void)
++{
++		/* NOTICE("rz_awo_notify: Notify CM33 of request for AWO.\n"); */
++		mmio_write_32(RZG3E_ELC + ICU_SWINT, 1 << (INT_NUM_TO_USE + SHIFT_FOR_IM33));
++}
++#endif
+ 
+ extern void pwrc_func_call_with_pmustack(uintptr_t jump, void *arg);
+ 
+@@ -31,7 +52,20 @@ static void __dead2 pwrc_go_suspend_to_ram(void)
+ 
+ 	ddr_retention_entry();
+ 
++#if defined(PLAT_SYSTEM_SUSPEND_awo)
++       rz_awo_notify();
++    /* GIC-600 disabling */
++    uint32_t reg32 = mmio_read_32(RZ_SOC_GICD_BASE + GICD_CTLR);
++    mmio_write_32(RZ_SOC_GICD_BASE + GICD_CTLR, reg32 & GICD_CTLR_EGRP_MASK);
++    do {
++        reg32 = mmio_read_32(RZ_SOC_GICD_BASE + GICD_CTLR);
++    }while (reg32 & GICD_CTLR_RWP_MASK);
++    isb();
++    dsb();
++
++#else
+ 	pwrc_board_suspend_on();
++#endif
+ 
+ 	while (1)
+ 		wfi();

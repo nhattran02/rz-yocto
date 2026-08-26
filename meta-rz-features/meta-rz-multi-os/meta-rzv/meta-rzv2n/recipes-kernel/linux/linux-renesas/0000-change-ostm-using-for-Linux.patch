@@ -1,0 +1,38 @@
+diff --git a/arch/arm64/boot/dts/renesas/r9a09g056n48-rzv2n-evk.dts b/arch/arm64/boot/dts/renesas/r9a09g056n48-rzv2n-evk.dts
+index eefca70b2d50..e5bb483bd79b 100644
+--- a/arch/arm64/boot/dts/renesas/r9a09g056n48-rzv2n-evk.dts
++++ b/arch/arm64/boot/dts/renesas/r9a09g056n48-rzv2n-evk.dts
+@@ -659,10 +659,6 @@ &ohci0 {
+ 	status = "okay";
+ };
+ 
+-&ostm1 {
+-	status = "okay";
+-};
+-
+ &ostm2 {
+ 	status = "okay";
+ };
+@@ -671,22 +667,6 @@ &ostm3 {
+ 	status = "okay";
+ };
+ 
+-&ostm4 {
+-	status = "okay";
+-};
+-
+-&ostm5 {
+-	status = "okay";
+-};
+-
+-&ostm6 {
+-	status = "okay";
+-};
+-
+-&ostm7 {
+-	status = "okay";
+-};
+-
+ &pinctrl {
+ #if (!RSPI2_RSCI9_SEL)
+ 	rspi2_pins: rspi2 {

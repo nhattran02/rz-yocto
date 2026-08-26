@@ -1,0 +1,58 @@
+diff --git a/arch/arm64/boot/dts/renesas/r9a09g056.dtsi b/arch/arm64/boot/dts/renesas/r9a09g056.dtsi
+index 70cc5fc22a15..d27eae542382 100644
+--- a/arch/arm64/boot/dts/renesas/r9a09g056.dtsi
++++ b/arch/arm64/boot/dts/renesas/r9a09g056.dtsi
+@@ -315,7 +315,7 @@ pinctrl: pinctrl@10410000 {
+ 		};
+ 
+ 		cpg: clock-controller@10420000 {
+-			compatible = "renesas,r9a09g056-cpg";
++			compatible = "renesas,r9a09g056-cpg", "syscon";
+ 			reg = <0 0x10420000 0 0x10000>;
+ 			clocks = <&audio_extal_clk>, <&audio_clka>,
+ 				 <&audio_clkb>, <&audio_clkc>,
+diff --git a/arch/arm64/boot/dts/renesas/r9a09g056n48-evk-multi-os.dtsi b/arch/arm64/boot/dts/renesas/r9a09g056n48-evk-multi-os.dtsi
+index fd7ffbc455f0..cfb77807036b 100755
+--- a/arch/arm64/boot/dts/renesas/r9a09g056n48-evk-multi-os.dtsi
++++ b/arch/arm64/boot/dts/renesas/r9a09g056n48-evk-multi-os.dtsi
+@@ -56,4 +56,40 @@ receiver@10481000 {
+                interrupts = <0x00 0x181 0x04>;
+                status = "okay";
+        };
++
++        soc: soc {
++                cm33_rproc: cm33 {
++                        compatible = "renesas,rz-cm33";
++                        reg = <0x0 0x08000000 0x0 0x000FFFFF>,
++                                <0x0 0x40000000 0x0 0x03F00000>;
++                        reg-names = "cm33_sram", "cm33_ddr";
++                        memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
++                        renesas,rz-cpg = <&cpg>;
++                        renesas,rz-sysc = <&sys>;
++                        renesas,rz-bootaddrs = <0x08003000>, <0x18003000>;
++                        renesas,rz-rsctbl = <0x42F00000>;
++                        power-domains = <&cpg>;
++                        status = "okay";
++                };
++        };
++
++        reserved-memory {
++                vdev0vring0: vdev0vring0@0x43000000 {
++                                compatible = "shared-dma-pool";
++                                reg = <0x0 0x43000000 0x0 0x50000>;
++                                no-map;
++                };
++
++                vdev0vring1: vdev0vring1@0x43050000 {
++                                compatible = "shared-dma-pool";
++                                reg = <0x0 0x43050000 0x0 0x50000>;
++                                no-map;
++                };
++
++                vdev0buffer: vdev0buffer@0x43200000 {
++                                compatible = "shared-dma-pool";
++                                reg = <0x0 0x43200000 0x0 0x300000>;
++                                no-map;
++                };
++        };
+ };

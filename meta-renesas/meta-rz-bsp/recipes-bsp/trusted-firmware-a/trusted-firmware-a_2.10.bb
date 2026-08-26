@@ -23,6 +23,7 @@ BUILD_DIR .= "/${@'debug' if d.getVar("TFA_DEBUG") == '1' else 'release'}"
 
 EXTRA_OEMAKE:append:rzg2l-family = " FIP_ALIGN=16 ${ECC_FLAGS}"
 EXTRA_OEMAKE:append:rzg3e-family = " PLAT_SYSTEM_SUSPEND=1"
+EXTRA_OEMAKE:append:rzv2n-family = " PLAT_SYSTEM_SUSPEND=1"
 
 PMIC_BUILD_DIR = "${S}/build_pmic"
 

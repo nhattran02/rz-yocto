@@ -1,0 +1,13 @@
+diff --git a/plat/renesas/rz/common/g3e_common.mk b/plat/renesas/rz/common/g3e_common.mk
+index 6b4c08da3..c964fb666 100644
+--- a/plat/renesas/rz/common/g3e_common.mk
++++ b/plat/renesas/rz/common/g3e_common.mk
+@@ -24,7 +24,7 @@ PLAT_SYSTEM_SUSPEND				:= 0
+ ifneq (${PLAT_SYSTEM_SUSPEND},0)
+ override PLAT_SYSTEM_SUSPEND	:= 1
+ $(eval $(call add_define,PLAT_EXTRA_LD_SCRIPT))
+-ifneq (${PLAT_M33_BOOT_SUPPORT},1)
++ifeq (${ENABLE_RZG3E_CM33_BOOT},1)
+ $(eval $(call add_define,PLAT_SYSTEM_SUSPEND_awo))
+ endif
+ endif

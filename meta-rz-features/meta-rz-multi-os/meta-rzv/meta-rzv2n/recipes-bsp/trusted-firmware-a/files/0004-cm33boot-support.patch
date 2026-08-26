@@ -1,0 +1,30 @@
+diff --git a/plat/renesas/rz/common/v2n_common.mk b/plat/renesas/rz/common/v2n_common.mk
+index cef302ab5..69d07c664 100644
+--- a/plat/renesas/rz/common/v2n_common.mk
++++ b/plat/renesas/rz/common/v2n_common.mk
+@@ -24,14 +24,24 @@ PLAT_M33_BOOT_SUPPORT			:= 0
+ PLAT_EMMC_WRITE_ENABLE			:= 1
+ BOOT_TFA_USING_CM33				:= 0
+ 
++ifeq ($(ENABLE_RZV2N_CM33_BOOT),1)
++override BOOT_TFA_USING_CM33	:= 1
++endif
++
+ ifneq ($(PLAT_SYSTEM_SUSPEND),0)
+ override PLAT_SYSTEM_SUSPEND	:= 1
+-override BOOT_TFA_USING_CM33	:= 1
++ifeq ($(BOOT_TFA_USING_CM33),0)
++$(error Suspend/Resume in CA55 coldboot is not supported by RZ/V2N.)
++endif
+ $(eval $(call add_define,PLAT_EXTRA_LD_SCRIPT))
+ endif
+ ifeq (${ENABLE_CM33_FIRMWARE_LOAD}, 1)
++ifeq (${BOOT_TFA_USING_CM33}, 1)
++$(error Cannot enabling ENABLE_CM33_FIRMWARE_LOAD if ENABLE_RZV2N_CM33_BOOT is enabled.)
++else
+ override PLAT_M33_BOOT_SUPPORT	:= 1
+ endif
++endif
+ 
+ $(eval $(call add_define,PLAT_SOC_RZV2N))
+ $(eval $(call add_define,PROTECTED_CHIPID))

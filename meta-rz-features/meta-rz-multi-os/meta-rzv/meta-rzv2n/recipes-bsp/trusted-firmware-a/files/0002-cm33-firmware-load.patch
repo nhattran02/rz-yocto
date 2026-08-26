@@ -1,0 +1,143 @@
+diff --git a/plat/renesas/rz/common/v2n_common.mk b/plat/renesas/rz/common/v2n_common.mk
+index d9d90f564..cef302ab5 100644
+--- a/plat/renesas/rz/common/v2n_common.mk
++++ b/plat/renesas/rz/common/v2n_common.mk
+@@ -26,10 +26,12 @@ BOOT_TFA_USING_CM33				:= 0
+ 
+ ifneq ($(PLAT_SYSTEM_SUSPEND),0)
+ override PLAT_SYSTEM_SUSPEND	:= 1
+-#override PLAT_M33_BOOT_SUPPORT	:= 1
+ override BOOT_TFA_USING_CM33	:= 1
+ $(eval $(call add_define,PLAT_EXTRA_LD_SCRIPT))
+ endif
++ifeq (${ENABLE_CM33_FIRMWARE_LOAD}, 1)
++override PLAT_M33_BOOT_SUPPORT	:= 1
++endif
+ 
+ $(eval $(call add_define,PLAT_SOC_RZV2N))
+ $(eval $(call add_define,PROTECTED_CHIPID))
+diff --git a/plat/renesas/rz/soc/v2n/bl2_plat_setup.c b/plat/renesas/rz/soc/v2n/bl2_plat_setup.c
+index 594da83c6..e81469a46 100644
+--- a/plat/renesas/rz/soc/v2n/bl2_plat_setup.c
++++ b/plat/renesas/rz/soc/v2n/bl2_plat_setup.c
+@@ -50,7 +50,7 @@ int bl2_plat_handle_pre_image_load(unsigned int image_id)
+ 
+ 	if (image_id == BL22_IMAGE_ID) {
+ #if PLAT_M33_BOOT_SUPPORT
+-		if (cpg_is_m33_core_booted())
++		if (cpg_is_m33_core_booted() || bl2_plat_get_boot_mode() == RZ_WARM_BOOT)
+ 			bl_mem_params->image_info.h.attr |= IMAGE_ATTRIB_SKIP_LOADING;
+ #endif
+ 	} else {
+diff --git a/plat/renesas/rz/soc/v2n/include/rz_soc_def.h b/plat/renesas/rz/soc/v2n/include/rz_soc_def.h
+index 3f9a4c32b..aef2cdcd2 100644
+--- a/plat/renesas/rz/soc/v2n/include/rz_soc_def.h
++++ b/plat/renesas/rz/soc/v2n/include/rz_soc_def.h
+@@ -82,7 +82,7 @@
+ 
+ #define RZV2N_SD_FIP_BASE			RZV2N_FIP_OFFSET
+ 
+-#define RZV2N_M33_FW_OFFSET				UL(0x00200000)
++#define RZV2N_M33_FW_OFFSET				UL(0x00200200)
+ #define RZV2N_SPIROM_M33_FW_BASE		(RZV2N_XSPI_MEMORY_MAP_BASE + RZV2N_M33_FW_OFFSET)
+ #define RZV2N_EMMC_M33_FW_BASE			RZV2N_M33_FW_OFFSET
+ #define RZV2N_SD_M33_FW_BASE			RZV2N_M33_FW_OFFSET
+diff --git a/plat/renesas/rz/soc/v2n/plat_storage.c b/plat/renesas/rz/soc/v2n/plat_storage.c
+index c61eeec48..83ffab309 100644
+--- a/plat/renesas/rz/soc/v2n/plat_storage.c
++++ b/plat/renesas/rz/soc/v2n/plat_storage.c
+@@ -15,10 +15,10 @@
+ #include <io_sddrv.h>
+ #include <lib/mmio.h>
+ #include <tools_share/firmware_image_package.h>
+-#if PLAT_SYSTEM_SUSPEND
++#if (PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT)
+ #include <plat_tbbr_img_def.h>
+ #include <io_xspidrv.h>
+-#endif /* PLAT_SYSTEM_SUSPEND */
++#endif /* PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT */
+ 
+ #include <rz_soc_def.h>
+ #include <sys.h>
+@@ -32,9 +32,9 @@ static uintptr_t fip_dev_handle;
+ static uintptr_t memdrv_dev_handle;
+ static uintptr_t emmcdrv_dev_handle;
+ static uintptr_t sddrv_dev_handle;
+-#if PLAT_SYSTEM_SUSPEND
++#if (PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT)
+ static uintptr_t xspidrv_dev_handle;
+-#endif /* PLAT_SYSTEM_SUSPEND */
++#endif /* PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT */
+ 
+ static uintptr_t boot_io_drv_id;
+ 
+@@ -112,9 +112,9 @@ static int32_t open_emmcdrv(const uintptr_t spec);
+ static int32_t open_memmap(const uintptr_t spec);
+ static int32_t open_fipdrv(const uintptr_t spec);
+ static int32_t open_sddrv(const uintptr_t spec);
+-#if PLAT_SYSTEM_SUSPEND
++#if (PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT)
+ static int32_t open_xspidrv(const uintptr_t spec);
+-#endif /* PLAT_SYSTEM_SUSPEND */
++#endif /* PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT */
+ 
+ struct plat_io_policy {
+ 	uintptr_t *dev_handle;
+@@ -272,7 +272,7 @@ static int32_t open_sddrv(const uintptr_t spec)
+ 	return io_dev_init(sddrv_dev_handle, 0);
+ }
+ 
+-#if PLAT_SYSTEM_SUSPEND
++#if (PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT)
+ static int32_t open_xspidrv(const uintptr_t spec)
+ {
+ 	uintptr_t handle;
+@@ -288,7 +288,7 @@ static int32_t open_xspidrv(const uintptr_t spec)
+ 
+ 	return result;
+ }
+-#endif /* PLAT_SYSTEM_SUSPEND */
++#endif /* PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT */
+ 
+ static void update_dev_policies(uint16_t boot_mode)
+ {
+@@ -333,9 +333,9 @@ void rz_io_setup(void)
+ 	const io_dev_connector_t *emmc;
+ 	const io_dev_connector_t *rzsoc;
+ 	const io_dev_connector_t *sd;
+-#if PLAT_SYSTEM_SUSPEND
++#if (PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT)
+ 	const io_dev_connector_t *xspi;
+-#endif /* PLAT_SYSTEM_SUSPEND */
++#endif /* PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT */
+ 	boot_mode_t boot_mode;
+ 
+ 	boot_mode = sys_get_boot_mode();
+@@ -356,10 +356,10 @@ void rz_io_setup(void)
+ 		register_io_dev_memmap(&memmap);
+ 		io_dev_open(memmap, 0, &memdrv_dev_handle);
+ 
+-#if PLAT_SYSTEM_SUSPEND
++#if (PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT)
+ 		register_io_dev_xspidrv(&xspi);
+ 		io_dev_open(xspi, 0, &xspidrv_dev_handle);
+-#endif /* PLAT_SYSTEM_SUSPEND */
++#endif /* PLAT_SYSTEM_SUSPEND || PLAT_M33_BOOT_SUPPORT */
+ 	} else if  (boot_mode == SYS_BOOT_MODE_EMMC_1_8 ||
+ 				boot_mode == SYS_BOOT_MODE_EMMC_3_3) {
+ 		if (emmc_init() != EMMC_SUCCESS) {
+diff --git a/plat/renesas/rz/soc/v2n/platform.mk b/plat/renesas/rz/soc/v2n/platform.mk
+index 2a74359b3..48ab12eb8 100644
+--- a/plat/renesas/rz/soc/v2n/platform.mk
++++ b/plat/renesas/rz/soc/v2n/platform.mk
+@@ -69,3 +69,10 @@ ifneq (${DEBUG}, 0)
+ TF_CFLAGS += -O0 -fstack-usage
+ ASFLAGS += -O0 -fstack-usage
+ endif
++
++ifeq (${ENABLE_SRAM_REGION_ACCESS_MCPU}, 1)
++TF_CFLAGS += -DENABLE_SRAM_REGION_ACCESS_MCPU=1
++endif
++ifeq (${ENABLE_CA55_CLOCKUP}, 1)
++TF_CFLAGS += -DPLAT_CA55_CLOCKUP=1
++endif

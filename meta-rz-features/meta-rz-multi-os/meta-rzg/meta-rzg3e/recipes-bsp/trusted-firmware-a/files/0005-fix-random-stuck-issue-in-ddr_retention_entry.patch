@@ -1,0 +1,297 @@
+From d7d8ec0b4b1cace55a4c4f46d421b27e0cab35e6 Mon Sep 17 00:00:00 2001
+From: Chen Tao <tao.chen.xc@renesas.com>
+Date: Wed, 21 Jan 2026 14:53:29 +0900
+Subject: [PATCH 1/2] fix random stuck issue in ddr_retention_entry
+
+---
+ plat/renesas/rz/soc/g3e/drivers/cpg.c         | 137 +++++++++++++++++-
+ .../renesas/rz/soc/g3e/drivers/ddr/ddr_misc.c |  41 +++++-
+ plat/renesas/rz/soc/g3e/include/cpg_regs.h    |   3 +
+ plat/renesas/rz/soc/g3e/plat_pm.c             |   6 +-
+ 4 files changed, 170 insertions(+), 17 deletions(-)
+
+diff --git a/plat/renesas/rz/soc/g3e/drivers/cpg.c b/plat/renesas/rz/soc/g3e/drivers/cpg.c
+index 975cbe827..9cddb8a46 100644
+--- a/plat/renesas/rz/soc/g3e/drivers/cpg.c
++++ b/plat/renesas/rz/soc/g3e/drivers/cpg.c
+@@ -556,6 +556,110 @@ static CPG_SETUP_DATA cpg_reset_tbl[] = {
+ 	},
+ };
+ 
++#ifdef PLAT_SYSTEM_SUSPEND_awo
++static CPG_REG_SETTING cpg_pd_others_clk_on_tbl[] = {
++	{	/* CPG_CLKON_0 */
++		.addr = (uintptr_t)CPG_CLKON_0,
++		.val  = 0x0000005E
++
++	},
++	{	/* CPG_CLKON_3 */
++		.addr = (uintptr_t)CPG_CLKON_3,
++		.val  = 0x000007FE
++
++	},
++	{	/* CPG_CLKON_4 */
++		.addr = (uintptr_t)CPG_CLKON_4,
++		.val  = 0x0000E600
++
++	},
++	{       /* CPG_CLKON_5 */
++		.addr = (uintptr_t)CPG_CLKON_5,
++		.val  = 0x0000FFF7
++
++	},
++	{	/* CPG_CLKON_6 */
++		.addr = (uintptr_t)CPG_CLKON_6,
++		.val  = 0x0000FFFF
++
++	},
++	{	/* CPG_CLKON_7 */
++		.addr = (uintptr_t)CPG_CLKON_7,
++		.val  = 0x0000FFFF
++
++	},
++	{	/* CPG_CLKON_8 */
++		.addr = (uintptr_t)CPG_CLKON_8,
++		.val  = 0x00007FFF
++
++	},
++	{	/* CPG_CLKON_9 */
++		.addr = (uintptr_t)CPG_CLKON_9,
++		.val  = 0x0000FFF7
++
++	},
++	{       /* CPG_CLKON_10 */
++		.addr = (uintptr_t)CPG_CLKON_10,
++		.val  = 0x0000FFFB
++
++	},
++	{	/* CPG_CLKON_11 */
++		.addr = (uintptr_t)CPG_CLKON_11,
++		.val  = 0x0000FFF9
++
++	},
++	{	/* CPG_CLKON_12 */
++		.addr = (uintptr_t)CPG_CLKON_12,
++		.val  = 0x0000003F
++
++	},
++	{	/* CPG_CLKON_13 */
++		.addr = (uintptr_t)CPG_CLKON_13,
++		.val  = 0x0000001C
++
++	},
++	{	/* CPG_CLKON_14 */
++		.addr = (uintptr_t)CPG_CLKON_14,
++		.val  = 0x0000FF00
++
++	},
++	{	/* CPG_CLKON_15 */
++		.addr = (uintptr_t)CPG_CLKON_15,
++		.val  = 0x0000FFFF
++
++	},
++	{	/* CPG_CLKON_16 */
++		.addr = (uintptr_t)CPG_CLKON_16,
++		.val  = 0x00000401
++
++	},
++	{	/* CPG_CLKON_22 */
++		.addr = (uintptr_t)CPG_CLKON_22,
++		.val  = 0x00001FFF
++	},
++	{	/* CPG_CLKON_23 */
++		.addr = (uintptr_t)CPG_CLKON_23,
++		.val  = 0x00007FFF
++	},
++	{	/* CPG_CLKON_24 */
++		.addr = (uintptr_t)CPG_CLKON_24,
++		.val  = 0x000007FF
++	},
++	{	/* CPG_CLKON_25 */
++		.addr = (uintptr_t)CPG_CLKON_25,
++		.val  = 0x00000001
++	},
++	{	/* CPG_CLKON_26 */
++		.addr = (uintptr_t)CPG_CLKON_26,
++		.val  = 0x0000BFFF
++	},
++	{	/* CPG_CLKON_27 */
++		.addr = (uintptr_t)CPG_CLKON_27,
++		.val  = 0x0000003F
++	},
++};
++#endif
++
+ #if PLAT_M33_BOOT_SUPPORT
+ static CPG_SETUP_DATA cpg_m33_clk_on_tbl[] = {
+ 	{	/* CM33 */
+@@ -648,7 +752,19 @@ static CPG_REG_SETTING cpg_dynamic_select_tbl[] = {
+ 	{ (uintptr_t)CPG_CDDIV5,				0x00000000 },
+ };
+ 
+-#if PLAT_M33_BOOT_SUPPORT 
++#ifdef PLAT_SYSTEM_SUSPEND_awo
++static void cpg_ctrl_clkon(CPG_REG_SETTING const *array, uint32_t num, uint32_t cpg_state)
++{
++	for (int i = 0; i < num; i++, array++) {
++		uint32_t val = (array->val & 0xFFFF) | ((array->val & 0xFFFF) << 16);
++		if (cpg_state == CPG_OFF)
++			val &= 0xFFFF0000;
++		mmio_write_32(array->addr, val);
++	}
++}
++#endif
++
++#if PLAT_M33_BOOT_SUPPORT
+ static void cpg_ctrl_clk(CPG_SETUP_DATA const *array, uint32_t num)
+ {
+ 	int i;
+@@ -863,10 +979,10 @@ static void cpg_mstop_setup(void)
+ 										| CPG_BUS_11_MSTOP_GTM6);
+ 
+ 	REMOVE_MSTOPS_W(CPG_BUS_12_MSTOP,     CPG_BUS_12_MSTOP_GTM7
+-#if PLAT_M33_BOOT_SUPPORT			
+-										| CPG_BUS_12_MSTOP_SRAM1			
+-										| CPG_BUS_12_MSTOP_ACPU_TO_MCPU			
+-#endif	
++#if PLAT_M33_BOOT_SUPPORT
++										| CPG_BUS_12_MSTOP_SRAM1
++										| CPG_BUS_12_MSTOP_ACPU_TO_MCPU
++#endif
+ 										| CPG_BUS_12_MSTOP_MCPU_TO_ACPU);
+ 
+ 	REMOVE_MSTOPS_W(CPG_BUS_13_MSTOP,     CPG_BUS_13_MSTOP_LVDS
+@@ -914,6 +1030,13 @@ static CPG_SETUP_DATA cpg_clk_sr2_tbl[] = {
+ 
+ void cpg_prepare_suspend(void)
+ {
++#ifdef PLAT_SYSTEM_SUSPEND_awo
++	cpg_ctrl_clkon(&cpg_pd_others_clk_on_tbl[0], ARRAY_SIZE(cpg_pd_others_clk_on_tbl), CPG_ON);
++	udelay(10);
++	cpg_ctrl_clkon(&cpg_pd_others_clk_on_tbl[0], ARRAY_SIZE(cpg_pd_others_clk_on_tbl), CPG_OFF);
++	udelay(10);
++#endif
++
+ 	REMOVE_MSTOPS_W(CPG_BUS_3_MSTOP, CPG_BUS_3_MSTOP_RIIC8);
+ 
+ 	cpg_ctrl_clkrst(&cpg_clk_sr2_tbl[0], ARRAY_SIZE(cpg_clk_sr2_tbl), CLK_RST_ENABLE);
+@@ -1080,7 +1203,7 @@ void cpg_m33_reset_release()
+ 	do {
+ 		val = mmio_read_32(CPG_RSTMON_0);
+ 	} while((val & 0xE0000) != 0);
+-	
++
+ 	mmio_write_32(CPG_CM33_CTL, 0x000000000);
+ }
+-#endif
+\ No newline at end of file
++#endif
+diff --git a/plat/renesas/rz/soc/g3e/drivers/ddr/ddr_misc.c b/plat/renesas/rz/soc/g3e/drivers/ddr/ddr_misc.c
+index 2de6a88bf..7a7141d6a 100644
+--- a/plat/renesas/rz/soc/g3e/drivers/ddr/ddr_misc.c
++++ b/plat/renesas/rz/soc/g3e/drivers/ddr/ddr_misc.c
+@@ -13,6 +13,7 @@
+ 
+ #include "ddr_regs.h"
+ #include "ddr_private.h"
++#include "sys_regs.h"
+ 
+ void ddrtop_mc_apb_rmw(uint32_t addr, uint32_t data, uint32_t mask)
+ {
+@@ -32,7 +33,7 @@ void ddrtop_mc_apb_poll(uint32_t addr, uint32_t data, uint32_t mask)
+ 	tmp_data &= mask;
+ 
+ 	while (tmp_data != data) {
+-		udelay(1);
++		wait_pclk(10);
+ 		tmp_data = ddrtop_mc_apb_rd(addr);
+ 		tmp_data &= mask;
+ 	}
+@@ -137,19 +138,49 @@ uint32_t get_mail(uint8_t mode_32bits)
+ 	return mail;
+ }
+ 
+-static void soft_delay(uint64_t usec)
++static uint32_t get_cpu_clock_hz(void)
+ {
++	static uint32_t cpuclk_freq = 0;
++#if PLAT_CA55_CLOCKUP
+ 	/* RZ/G3E: CPU Clock = 1.8G Hz*/
+-	const uint32_t cpuclk_freq = 1800000000;
++	cpuclk_freq = 1800000000;
++#else
++	static bool initialized = false;
++	if (initialized) {
++		return cpuclk_freq;
++	}
++	/* CPU Clock is determined by the settings of SYS_LSI_MODE[12:11] (BOOTPLLCA[1:0]) bits
++	 * BOOTPLLCA[1:0] = 00b : 1.1GHz
++	 * BOOTPLLCA[1:0] = 01b : 1.5GHz
++	 * BOOTPLLCA[1:0] = 10b : 1.6GHz
++	 * BOOTPLLCA[1:0] = 11b : 1.7GHz
++	 */
++	const uint32_t cpuclk_table[4] = {
++		1100000000, /* 00b */
++		1500000000, /* 01b */
++		1600000000, /* 10b */
++		1700000000  /* 11b */
++	};
++	uint32_t sys_lsi_mode = mmio_read_32(SYS_LSI_MODE);
++	uint32_t bootpllca = (sys_lsi_mode >> 11) & 0x3;
++	cpuclk_freq = cpuclk_table[bootpllca];
++	initialized = true;
++#endif
++	return cpuclk_freq;
++}
++
++static void __attribute__((optimize("O0"))) soft_delay(uint64_t usec)
++{
++	const uint32_t cpuclk_freq = get_cpu_clock_hz();
+ 	const uint32_t nop_clk_cycles = 4;
+ 	const uint32_t num_of_nop_needed = cpuclk_freq / (nop_clk_cycles * 1000000);
+ 
+ 	volatile uint64_t timeout = num_of_nop_needed * usec;
+ 
+ 	while (timeout--) {
+-		__asm__ ("nop");
+-		dsb();
++		__asm__ volatile("nop");
+ 	}
++	dsb();
+ }
+ 
+ void wait_dficlk(uint32_t cycles)
+diff --git a/plat/renesas/rz/soc/g3e/include/cpg_regs.h b/plat/renesas/rz/soc/g3e/include/cpg_regs.h
+index 24c887145..1e1663bbc 100644
+--- a/plat/renesas/rz/soc/g3e/include/cpg_regs.h
++++ b/plat/renesas/rz/soc/g3e/include/cpg_regs.h
+@@ -99,6 +99,9 @@
+ #define	CPG_CLKON_22				(CPG_BASE + 0x658)	/* CGC control */
+ #define	CPG_CLKON_23				(CPG_BASE + 0x65C)	/* CGC control */
+ #define	CPG_CLKON_24				(CPG_BASE + 0x660)	/* CGC control */
++#define	CPG_CLKON_25				(CPG_BASE + 0x664)	/* CGC control */
++#define	CPG_CLKON_26				(CPG_BASE + 0x668)	/* CGC control */
++#define	CPG_CLKON_27				(CPG_BASE + 0x66C)	/* CGC control */
+ 
+ #define	CPG_CLKSTATUS0				(CPG_BASE + 0x700)	/* Dynamic gear/mux status monitor */
+ 
+diff --git a/plat/renesas/rz/soc/g3e/plat_pm.c b/plat/renesas/rz/soc/g3e/plat_pm.c
+index 71e0d8fac..6a73b20c8 100644
+--- a/plat/renesas/rz/soc/g3e/plat_pm.c
++++ b/plat/renesas/rz/soc/g3e/plat_pm.c
+@@ -164,11 +164,7 @@ static void rzg3e_pwr_domain_off(const psci_power_state_t *state)
+ 	plat_gic_cpuif_disable();
+ 
+ 	/* Request transition to Cortex-A55 CoreX Sleep Mode */
+-	mmio_write_32(CPG_LP_CTL1, (CPG_LP_CTL1_CA55SLEEP_REQ << coreid));
+-
+-
+-	/* Enter the Cortex-A55 Sleep Mode */
+-	mmio_write_32(CPG_LP_CTL1, mmio_read_32(CPG_LP_CTL1) | 0x00000001);
++	mmio_write_32(CPG_LP_CTL1, (mmio_read_32(CPG_LP_CTL1) | (CPG_LP_CTL1_CA55SLEEP_REQ << coreid)));
+ 
+ 	/* Issue Barrier instruction */
+ 	isb();
+-- 
+2.43.0
+
