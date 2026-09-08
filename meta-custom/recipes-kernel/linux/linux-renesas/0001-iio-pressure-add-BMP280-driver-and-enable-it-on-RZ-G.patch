@@ -1,0 +1,429 @@
+From 2874a39fded8739c1c13745b5df127a70fec6a2d Mon Sep 17 00:00:00 2001
+From: Nhat Tran <nhat.tran.zg@bp.renesas.com>
+Date: Tue, 8 Sep 2026 14:31:12 +0700
+Subject: [PATCH]     iio: pressure: add BMP280 driver and enable it on RZ/G2L
+ SMARC
+
+    Add a self-written IIO driver for the Bosch BMP280 pressure and
+    temperature sensor connected over I2C.
+
+    On the RZ/G2L SMARC platform the sensor sits on RIIC2, which is routed
+    to PMOD1 (CN7). Pin function changes:
+
+      rzg2l-smarc-pinfunction.dtsi: new i2c2_pmod1_pins
+      node muxing P48_0 -> RIIC2_SDA and P48_1 -> RIIC2_SCL (pinmux function 3)
+
+Signed-off-by: Nhat Tran <nhat.tran.zg@bp.renesas.com>
+---
+ .../boot/dts/renesas/r9a07g044l2-smarc.dts    |   2 +-
+ .../dts/renesas/rzg2l-smarc-pinfunction.dtsi  |   5 +
+ arch/arm64/boot/dts/renesas/rzg2l-smarc.dtsi  |  12 +
+ arch/arm64/configs/defconfig                  |   1 +
+ drivers/iio/pressure/Kconfig                  |   9 +
+ drivers/iio/pressure/Makefile                 |   1 +
+ drivers/iio/pressure/myvendor_bmp280.c        | 301 ++++++++++++++++++
+ 7 files changed, 330 insertions(+), 1 deletion(-)
+ create mode 100644 drivers/iio/pressure/myvendor_bmp280.c
+
+diff --git a/arch/arm64/boot/dts/renesas/r9a07g044l2-smarc.dts b/arch/arm64/boot/dts/renesas/r9a07g044l2-smarc.dts
+index 568d49cfe44a..e002de0cf8df 100644
+--- a/arch/arm64/boot/dts/renesas/r9a07g044l2-smarc.dts
++++ b/arch/arm64/boot/dts/renesas/r9a07g044l2-smarc.dts
+@@ -8,7 +8,7 @@
+ /dts-v1/;
+ 
+ /* Enable SCIF2 (SER0) on PMOD1 (CN7) */
+-#define PMOD1_SER0	1
++#define PMOD1_SER0	0
+ 
+ /*
+  * To enable MTU3a PWM on PMOD0,
+diff --git a/arch/arm64/boot/dts/renesas/rzg2l-smarc-pinfunction.dtsi b/arch/arm64/boot/dts/renesas/rzg2l-smarc-pinfunction.dtsi
+index e9f244c33d55..f4f44a31e605 100644
+--- a/arch/arm64/boot/dts/renesas/rzg2l-smarc-pinfunction.dtsi
++++ b/arch/arm64/boot/dts/renesas/rzg2l-smarc-pinfunction.dtsi
+@@ -48,6 +48,11 @@ i2c1_pins: i2c1 {
+ 		input-enable;
+ 	};
+ 
++	i2c2_pmod1_pins: i2c2-pmod1 {
++		pinmux = <RZG2L_PORT_PINMUX(48, 0, 3)>, /* RIIC2_SDA */
++			     <RZG2L_PORT_PINMUX(48, 1, 3)>; /* RIIC2_SCL */
++	};	
++
+ 	i2c3_pins: i2c3 {
+ 		pinmux = <RZG2L_PORT_PINMUX(18, 0, 3)>, /* SDA */
+ 			 <RZG2L_PORT_PINMUX(18, 1, 3)>; /* SCL */
+diff --git a/arch/arm64/boot/dts/renesas/rzg2l-smarc.dtsi b/arch/arm64/boot/dts/renesas/rzg2l-smarc.dtsi
+index ee3d96fdb616..e5d976a92eca 100644
+--- a/arch/arm64/boot/dts/renesas/rzg2l-smarc.dtsi
++++ b/arch/arm64/boot/dts/renesas/rzg2l-smarc.dtsi
+@@ -105,6 +105,18 @@ codec_endpoint: endpoint {
+ 	};
+ };
+ 
++&i2c2 {
++	pinctrl-0 = <&i2c2_pmod1_pins>;
++	pinctrl-names = "default";
++	clock-frequency = <100000>; /* 100 Khz */
++	status = "okay";
++
++	pressure@76 {
++		compatible = "myvendor,bmp280";
++		reg = <0x76>;
++	};
++};
++
+ &i2c3 {
+ 	pinctrl-0 = <&i2c3_pins>;
+ 	pinctrl-names = "default";
+diff --git a/arch/arm64/configs/defconfig b/arch/arm64/configs/defconfig
+index cb6689f1377e..e0e87a4722ff 100644
+--- a/arch/arm64/configs/defconfig
++++ b/arch/arm64/configs/defconfig
+@@ -453,3 +453,4 @@ CONFIG_SLAB_FREELIST_HARDENED=y
+ # CONFIG_DMA_PERNUMA_CMA is not set
+ CONFIG_NVME_CORE=y
+ CONFIG_BLK_DEV_NVME=y
++CONFIG_MYVENDOR_BMP280=y
+\ No newline at end of file
+diff --git a/drivers/iio/pressure/Kconfig b/drivers/iio/pressure/Kconfig
+index d2cb8c871f6a..76c1e99ccd89 100644
+--- a/drivers/iio/pressure/Kconfig
++++ b/drivers/iio/pressure/Kconfig
+@@ -51,6 +51,15 @@ config BMP280_I2C
+ 	depends on I2C
+ 	select REGMAP_I2C
+ 
++config MYVENDOR_BMP280
++	tristate "MyVendor BMP280 pressure & temperature sensor"
++	depends on I2C
++	select REGMAP_I2C
++	select REGMAP
++	help 
++	  Say yes here to build support self-written 
++	  driver for Bosch BMP280 over I2C
++
+ config BMP280_SPI
+ 	tristate
+ 	depends on BMP280
+diff --git a/drivers/iio/pressure/Makefile b/drivers/iio/pressure/Makefile
+index 6482288e07ee..283fce6a01e1 100644
+--- a/drivers/iio/pressure/Makefile
++++ b/drivers/iio/pressure/Makefile
+@@ -10,6 +10,7 @@ obj-$(CONFIG_BMP280) += bmp280.o
+ bmp280-objs := bmp280-core.o bmp280-regmap.o
+ obj-$(CONFIG_BMP280_I2C) += bmp280-i2c.o
+ obj-$(CONFIG_BMP280_SPI) += bmp280-spi.o
++obj-$(CONFIG_MYVENDOR_BMP280) += myvendor_bmp280.o
+ obj-$(CONFIG_DLHL60D) += dlhl60d.o
+ obj-$(CONFIG_DPS310) += dps310.o
+ obj-$(CONFIG_IIO_CROS_EC_BARO) += cros_ec_baro.o
+diff --git a/drivers/iio/pressure/myvendor_bmp280.c b/drivers/iio/pressure/myvendor_bmp280.c
+new file mode 100644
+index 000000000000..337cbd146ca7
+--- /dev/null
++++ b/drivers/iio/pressure/myvendor_bmp280.c
+@@ -0,0 +1,301 @@
++#include <linux/i2c.h>
++#include <linux/regmap.h>
++#include <linux/mod_devicetable.h>
++#include <linux/iio/iio.h>
++#include <linux/delay.h>
++#include <linux/mutex.h>
++#include <linux/math64.h>   /* div64_s64 */
++#include <linux/unaligned.h>
++
++/**
++ * @brief chip register definition
++ */
++#define BMP280_REG_NVM_PAR_T1_L        0x88        /**< NVM PAR T1 low register */
++#define BMP280_REG_NVM_PAR_T1_H        0x89        /**< NVM PAR T1 high register */
++#define BMP280_REG_NVM_PAR_T2_L        0x8A        /**< NVM PAR T2 low register */
++#define BMP280_REG_NVM_PAR_T2_H        0x8B        /**< NVM PAR T2 high register */
++#define BMP280_REG_NVM_PAR_T3_L        0x8C        /**< NVM PAR T3 low register */
++#define BMP280_REG_NVM_PAR_T3_H        0x8D        /**< NVM PAR T3 high register */
++#define BMP280_REG_NVM_PAR_P1_L        0x8E        /**< NVM PAR P1 low register */
++#define BMP280_REG_NVM_PAR_P1_H        0x8F        /**< NVM PAR P1 high register */
++#define BMP280_REG_NVM_PAR_P2_L        0x90        /**< NVM PAR P2 low register */
++#define BMP280_REG_NVM_PAR_P2_H        0x91        /**< NVM PAR P2 high register */
++#define BMP280_REG_NVM_PAR_P3_L        0x92        /**< NVM PAR P3 low register */
++#define BMP280_REG_NVM_PAR_P3_H        0x93        /**< NVM PAR P3 high register */
++#define BMP280_REG_NVM_PAR_P4_L        0x94        /**< NVM PAR P4 low register */
++#define BMP280_REG_NVM_PAR_P4_H        0x95        /**< NVM PAR P4 high register */
++#define BMP280_REG_NVM_PAR_P5_L        0x96        /**< NVM PAR P5 low register */
++#define BMP280_REG_NVM_PAR_P5_H        0x97        /**< NVM PAR P5 high register */
++#define BMP280_REG_NVM_PAR_P6_L        0x98        /**< NVM PAR P6 low register */
++#define BMP280_REG_NVM_PAR_P6_H        0x99        /**< NVM PAR P6 high register */
++#define BMP280_REG_NVM_PAR_P7_L        0x9A        /**< NVM PAR P7 low register */
++#define BMP280_REG_NVM_PAR_P7_H        0x9B        /**< NVM PAR P7 high register */
++#define BMP280_REG_NVM_PAR_P8_L        0x9C        /**< NVM PAR P8 low register */
++#define BMP280_REG_NVM_PAR_P8_H        0x9D        /**< NVM PAR P8 high register */
++#define BMP280_REG_NVM_PAR_P9_L        0x9E        /**< NVM PAR P9 low register */
++#define BMP280_REG_NVM_PAR_P9_H        0x9F        /**< NVM PAR P9 high register */
++#define BMP280_REG_TEMP_XLSB           0xFC        /**< temp xlsb register */
++#define BMP280_REG_TEMP_LSB            0xFB        /**< temp lsb register */
++#define BMP280_REG_TEMP_MSB            0xFA        /**< temp msb register */
++#define BMP280_REG_PRESS_XLSB          0xF9        /**< press xlsb register */
++#define BMP280_REG_PRESS_LSB           0xF8        /**< press lsb register */
++#define BMP280_REG_PRESS_MSB           0xF7        /**< press msb register */
++#define BMP280_REG_CONFIG              0xF5        /**< config register */
++#define BMP280_REG_CTRL_MEAS           0xF4        /**< ctrl meas register */
++#define BMP280_REG_STATUS              0xF3        /**< status register */
++#define BMP280_REG_RESET               0xE0        /**< soft reset register */
++#define BMP280_REG_ID                  0xD0        /**< chip id register */
++#define BMP280_CHIP_ID                 0x58        /**< chip id value */
++#define BMP280_RESET_VAL               0xB6
++
++struct myv_bmp280 {
++	struct regmap *regmap;
++	struct mutex lock;
++	u16 t1;  s16 t2, t3;
++	u16 p1;  s16 p2, p3, p4, p5, p6, p7, p8, p9;
++	s32 t_fine;
++};
++
++static const struct regmap_config myv_bmp280_regmap = {
++	.reg_bits = 8,
++	.val_bits = 8,
++	.max_register = 0xFC,
++};
++
++static int myv_bmp280_read_raw(struct iio_dev *indio_dev,
++			       struct iio_chan_spec const *chan,
++			       int *val, int *val2, long mask);
++
++static const struct iio_chan_spec myv_bmp280_channels[] = {
++	{
++		.type = IIO_PRESSURE,
++		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
++	},
++	{
++		.type = IIO_TEMP,
++		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
++	},
++};
++
++static const struct iio_info myv_bmp280_info = {
++	.read_raw = myv_bmp280_read_raw,
++};
++
++static s32 myv_bmp280_compensate_temp(struct myv_bmp280 *st, s32 adc_t)
++{
++	s32 var1, var2;
++
++	var1 = ((((adc_t >> 3) - ((s32)st->t1 << 1))) * ((s32)st->t2)) >> 11;
++	var2 = (((((adc_t >> 4) - ((s32)st->t1)) *
++		  ((adc_t >> 4) - ((s32)st->t1))) >> 12) *
++		((s32)st->t3)) >> 14;
++
++	st->t_fine = var1 + var2;
++
++	return (st->t_fine * 5 + 128) >> 8;
++}
++
++static u32 myv_bmp280_compensate_press(struct myv_bmp280 *st, s32 adc_p)
++{
++	s64 var1, var2, p;
++
++	var1 = ((s64)st->t_fine) - 128000;
++	var2 = var1 * var1 * (s64)st->p6;
++	var2 = var2 + ((var1 * (s64)st->p5) << 17);
++	var2 = var2 + (((s64)st->p4) << 35);
++	var1 = ((var1 * var1 * (s64)st->p3) >> 8) +
++	       ((var1 * (s64)st->p2) << 12);
++	var1 = ((((s64)1) << 47) + var1) * ((s64)st->p1) >> 33;
++
++	if (var1 == 0)
++		return 0;              
++
++	p = 1048576 - adc_p;
++	p = div64_s64(((p << 31) - var2) * 3125, var1);
++	var1 = (((s64)st->p9) * (p >> 13) * (p >> 13)) >> 25;
++	var2 = (((s64)st->p8) * p) >> 19;
++	p = ((p + var1 + var2) >> 8) + (((s64)st->p7) << 4);
++
++	return (u32)p;
++}
++
++static int myv_bmp280_read_raw(struct iio_dev *indio_dev,
++			       struct iio_chan_spec const *chan,
++			       int *val, int *val2, long mask)
++{
++	struct myv_bmp280 *st = iio_priv(indio_dev);
++	u8 buf[6];
++	s32 adc_t, adc_p, comp_t;
++	u32 pa;
++	int ret;
++
++	if (mask != IIO_CHAN_INFO_PROCESSED)
++		return -EINVAL;
++
++	mutex_lock(&st->lock);
++
++	/* burst 0xF7..0xFC: press[MSB,LSB,XLSB] temp[MSB,LSB,XLSB] */
++	ret = regmap_bulk_read(st->regmap, BMP280_REG_PRESS_MSB, buf, 6);
++	if (ret)
++		goto out;
++
++	adc_p = ((s32)buf[0] << 12) | ((s32)buf[1] << 4) | (buf[2] >> 4);
++	adc_t = ((s32)buf[3] << 12) | ((s32)buf[4] << 4) | (buf[5] >> 4);
++
++	comp_t = myv_bmp280_compensate_temp(st, adc_t);   /* 0.01 degC */
++
++	switch (chan->type) {
++	case IIO_TEMP:
++		/* IIO processed temp = milli degC */
++		*val = comp_t * 10;
++		ret = IIO_VAL_INT;
++		break;
++	case IIO_PRESSURE:
++		/* Q24.8 Pa -> Pa -> kPa */
++		pa = myv_bmp280_compensate_press(st, adc_p) >> 8;
++		*val = pa / 1000;
++		*val2 = (pa % 1000) * 1000;
++		ret = IIO_VAL_INT_PLUS_MICRO;
++		break;
++	default:
++		ret = -EINVAL;
++	}
++out:
++	mutex_unlock(&st->lock);
++	return ret;
++}
++
++static int myv_bmp280_get_nvm_calib(struct i2c_client *client,
++				    struct myv_bmp280 *st)
++{
++	u8 b[24];
++	int ret;
++
++	ret = regmap_bulk_read(st->regmap, BMP280_REG_NVM_PAR_T1_L, b, sizeof(b));
++	if (ret)
++		return dev_err_probe(&client->dev, ret,
++				     "read calibration failed\n");
++
++	st->t1 = get_unaligned_le16(&b[0]);
++	st->t2 = get_unaligned_le16(&b[2]);
++	st->t3 = get_unaligned_le16(&b[4]);
++	st->p1 = get_unaligned_le16(&b[6]);
++	st->p2 = get_unaligned_le16(&b[8]);
++	st->p3 = get_unaligned_le16(&b[10]);
++	st->p4 = get_unaligned_le16(&b[12]);
++	st->p5 = get_unaligned_le16(&b[14]);
++	st->p6 = get_unaligned_le16(&b[16]);
++	st->p7 = get_unaligned_le16(&b[18]);
++	st->p8 = get_unaligned_le16(&b[20]);
++	st->p9 = get_unaligned_le16(&b[22]);
++
++	return 0;
++}
++
++static int myv_bmp280_probe(struct i2c_client *client)
++{
++    struct iio_dev *indio_dev;
++    struct myv_bmp280 *st;
++    unsigned int id;
++    int ret;
++
++    indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*st));
++    if (!indio_dev) {
++        return -ENOMEM;
++    }
++
++    st = iio_priv(indio_dev);
++    mutex_init(&st->lock);
++
++	st->regmap = devm_regmap_init_i2c(client, &myv_bmp280_regmap);
++	if (IS_ERR(st->regmap))
++		return PTR_ERR(st->regmap);
++
++    /* Read Chip ID */
++	ret = regmap_read(st->regmap, BMP280_REG_ID, &id);
++	if (ret)
++		return ret;
++	if (id != BMP280_CHIP_ID)
++		return dev_err_probe(&client->dev, -ENODEV,
++				     "bad chip id 0x%02x\n", id);    
++    else
++	    dev_info(&client->dev, "myv_bmp280 probed - \
++                        chip id: 0x%02x!\n", id);
++    
++    /* Reset BMP280 */
++    ret = regmap_write(st->regmap, BMP280_REG_RESET, 
++                                   BMP280_RESET_VAL);
++    if (ret) 
++        return ret;
++
++    msleep(5);
++
++    /* Get NVM Calib */
++    ret = myv_bmp280_get_nvm_calib(client, st);
++    if (ret)
++        return ret;
++
++    dev_info(&client->dev,
++            "Calibration data:\n"
++            "  T1 = %u\n"
++            "  T2 = %d\n"
++            "  T3 = %d\n"
++            "  P1 = %u\n"
++            "  P2 = %d\n"
++            "  P3 = %d\n"
++            "  P4 = %d\n"
++            "  P5 = %d\n"
++            "  P6 = %d\n"
++            "  P7 = %d\n"
++            "  P8 = %d\n"
++            "  P9 = %d\n",
++            st->t1, st->t2, st->t3,
++            st->p1, st->p2, st->p3, st->p4, st->p5,
++            st->p6, st->p7, st->p8, st->p9);    
++
++    /* config: t_sb=0.5ms (000), IIR filter x4 (010), spi3w=0  => 0x08 */
++    ret = regmap_write(st->regmap, BMP280_REG_CONFIG, 0x08);
++    if (ret)
++        return ret;
++
++    /* ctrl_meas: osrs_t x1 (001), osrs_p x4 (011), mode=normal (11) => 0x2F */
++    ret = regmap_write(st->regmap, BMP280_REG_CTRL_MEAS, 0x2F);
++    if (ret)
++        return ret;        
++
++    indio_dev->name = "myv_bmp280";
++	indio_dev->modes = INDIO_DIRECT_MODE;
++	indio_dev->channels = myv_bmp280_channels;
++	indio_dev->num_channels = ARRAY_SIZE(myv_bmp280_channels);
++	indio_dev->info = &myv_bmp280_info;
++
++	return devm_iio_device_register(&client->dev, indio_dev);
++
++    return 0;
++}
++
++static const struct of_device_id myv_bmp280_of[] = {
++	{ .compatible = "myvendor,bmp280" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, myv_bmp280_of);
++
++static const struct i2c_device_id myv_bmp280_id[] = {
++	{ "myv_bmp280" }, { }
++};
++
++MODULE_DEVICE_TABLE(i2c, myv_bmp280_id);
++
++static struct i2c_driver myv_bmp280_driver = {
++    .driver    = { 
++        .name = "myv_bmp280", 
++        .of_match_table = myv_bmp280_of,
++    },
++	.probe     = myv_bmp280_probe,
++	.id_table  = myv_bmp280_id,
++};
++module_i2c_driver(myv_bmp280_driver);
++
++MODULE_AUTHOR("Nhat Tran <nhat.tran.zg@bp.renesas.com>");
++MODULE_DESCRIPTION("Self-written pressure & temperature driver");
++MODULE_LICENSE("GPL");
+\ No newline at end of file
