@@ -1,10 +1,10 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"
-FILESPATH:prepend := "/home/rvc/rz_linux-cip/oe-local-files:"
-# srctreebase: /home/rvc/rz_linux-cip
+FILESPATH:prepend := "/home/rvc/rz-yocto/build/workspace/sources/linux-renesas/oe-local-files:"
+# srctreebase: /home/rvc/rz-yocto/build/workspace/sources/linux-renesas
 
 inherit externalsrc
 # NOTE: We use pn- overrides here to avoid affecting multiple variants in the case where the recipe uses BBCLASSEXTEND
-EXTERNALSRC:pn-linux-renesas = "/home/rvc/rz_linux-cip"
+EXTERNALSRC:pn-linux-renesas = "/home/rvc/rz-yocto/build/workspace/sources/linux-renesas"
 SRCTREECOVEREDTASKS = "do_validate_branches do_kernel_checkout do_fetch do_unpack do_kernel_configcheck"
 
 do_patch[noexec] = "1"
@@ -27,4 +27,4 @@ do_configure:append() {
     fi
 }
 
-# initial_rev .: 32bc2ab1f5160d9faf75cccb9998f69766687e49
+# initial_rev .: 212f6e88b7249f803ff5475c07b72c92ce2d929d
